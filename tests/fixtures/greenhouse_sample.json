@@ -1,0 +1,7 @@
+{"jobs": [
+  {"id": 5001, "title": "Software Engineer Intern, Summer 2027", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/5001", "location": {"name": "Toronto, ON, Canada"}, "departments": [{"name": "Engineering"}], "first_published": "2026-10-01T14:00:00Z"},
+  {"id": 5002, "title": "Senior Staff Software Engineer", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/5002", "location": {"name": "San Francisco, CA"}, "departments": [{"name": "Engineering"}], "first_published": "2026-09-15T10:00:00Z"},
+  {"id": 5003, "title": "Backend Engineer, New Grad", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/5003", "location": {"name": "Remote - North America"}, "departments": [{"name": "Platform"}], "first_published": "2026-10-05T09:00:00Z"},
+  {"id": 5004, "title": "Senior Manager, University Recruiting", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/5004", "location": {"name": "Vancouver, BC, Canada"}, "departments": [{"name": "People"}], "first_published": "2026-09-20T09:00:00Z"},
+  {"id": 5005, "title": "Co-op Software Developer (Winter 2027)", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/5005", "location": {"name": "Waterloo, ON"}, "departments": [{"name": "Engineering"}], "first_published": "2026-10-10T09:00:00Z"}
+]}

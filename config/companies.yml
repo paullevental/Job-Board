@@ -1,0 +1,224 @@
+# ============================================================================
+# UNVERIFIED SEED LIST
+#
+# These board tokens are starting guesses, not confirmed facts. Tokens change
+# when a company renames, migrates ATS, or restructures its careers page, and
+# a stale token returns 404 (or an empty board) forever without telling you.
+#
+#   RUN THIS FIRST:   python -m job_poller verify --prune
+#
+# It hits every token, reports which are live and how many postings each
+# returned, and deactivates the dead ones. Expect a meaningful fraction of
+# this list to be wrong on day one. That is normal, and it is why the verify
+# command exists.
+#
+# TO ADD A COMPANY:
+#   1. Open its careers page and click into any single job posting.
+#   2. Read the address bar:
+#        job-boards.greenhouse.io/SLUG  ->  ats: greenhouse
+#        jobs.lever.co/SLUG             ->  ats: lever
+#        jobs.ashbyhq.com/SLUG          ->  ats: ashby
+#      Ashby tokens are CASE SENSITIVE. "Linear" is not "linear".
+#   3. If the careers page is Workday, Taleo, SuccessFactors or bespoke, this
+#      tool cannot read it. Skip it. (Shopify and most banks are Workday.)
+#
+# Tags are free-form and used for filtering: `--tag canada`, `--tag fintech`.
+# ============================================================================
+
+companies:
+  # --- Canadian tech ------------------------------------------------------
+  - name: Wealthsimple
+    ats: greenhouse
+    token: wealthsimple
+    tags: [canada, fintech, toronto]
+
+  - name: Faire
+    ats: greenhouse
+    token: faire
+    tags: [canada, marketplace, toronto]
+
+  - name: Clio
+    ats: lever
+    token: clio
+    tags: [canada, saas, vancouver]
+
+  - name: 1Password
+    ats: greenhouse
+    token: 1password
+    tags: [canada, security, toronto]
+
+  - name: Cohere
+    ats: lever
+    token: cohere
+    tags: [canada, ai, toronto]
+
+  - name: Hootsuite
+    ats: lever
+    token: hootsuite
+    tags: [canada, saas, vancouver]
+
+  - name: Benevity
+    ats: lever
+    token: benevity
+    tags: [canada, saas, calgary]
+
+  - name: Coveo
+    ats: lever
+    token: coveo
+    tags: [canada, search, quebec]
+
+  - name: Ada
+    ats: lever
+    token: ada
+    tags: [canada, ai, toronto]
+
+  - name: Vidyard
+    ats: lever
+    token: vidyard
+    tags: [canada, video, waterloo]
+
+  - name: Thinkific
+    ats: lever
+    token: thinkific
+    tags: [canada, saas, vancouver]
+
+  - name: Later
+    ats: lever
+    token: later
+    tags: [canada, social, vancouver]
+
+  - name: Visier
+    ats: lever
+    token: visier
+    tags: [canada, analytics, vancouver]
+
+  - name: AppDirect
+    ats: lever
+    token: appdirect
+    tags: [canada, saas]
+
+  - name: Trulioo
+    ats: lever
+    token: trulioo
+    tags: [canada, identity, vancouver]
+
+  - name: Jane Software
+    ats: lever
+    token: janeapp
+    tags: [canada, health, vancouver]
+
+  # --- US tech with Canadian offices or remote-NA roles -------------------
+  - name: Stripe
+    ats: greenhouse
+    token: stripe
+    tags: [fintech, bigtech]
+
+  - name: Figma
+    ats: greenhouse
+    token: figma
+    tags: [design, bigtech]
+
+  - name: Databricks
+    ats: greenhouse
+    token: databricks
+    tags: [data, bigtech]
+
+  - name: Airtable
+    ats: greenhouse
+    token: airtable
+    tags: [saas]
+
+  - name: GitLab
+    ats: greenhouse
+    token: gitlab
+    tags: [devtools, remote]
+
+  - name: Cloudflare
+    ats: greenhouse
+    token: cloudflare
+    tags: [infra]
+
+  - name: Reddit
+    ats: greenhouse
+    token: reddit
+    tags: [social]
+
+  - name: Coinbase
+    ats: greenhouse
+    token: coinbase
+    tags: [fintech, crypto]
+
+  - name: Affirm
+    ats: greenhouse
+    token: affirm
+    tags: [fintech]
+
+  - name: Plaid
+    ats: greenhouse
+    token: plaid
+    tags: [fintech]
+
+  - name: DoorDash
+    ats: greenhouse
+    token: doordash
+    tags: [marketplace]
+
+  - name: Instacart
+    ats: greenhouse
+    token: instacart
+    tags: [marketplace, toronto]
+
+  - name: Flexport
+    ats: greenhouse
+    token: flexport
+    tags: [logistics]
+
+  - name: Benchling
+    ats: greenhouse
+    token: benchling
+    tags: [biotech]
+
+  - name: Robinhood
+    ats: greenhouse
+    token: robinhood
+    tags: [fintech]
+
+  - name: Dropbox
+    ats: greenhouse
+    token: dropbox
+    tags: [saas]
+
+  - name: Notion
+    ats: ashby
+    token: notion
+    tags: [saas]
+
+  - name: Linear
+    ats: ashby
+    token: Linear
+    tags: [devtools]
+
+  - name: Ramp
+    ats: ashby
+    token: ramp
+    tags: [fintech]
+
+  - name: Vercel
+    ats: ashby
+    token: vercel
+    tags: [devtools]
+
+  - name: Netflix
+    ats: lever
+    token: netflix
+    tags: [bigtech]
+
+  - name: Spotify
+    ats: lever
+    token: spotify
+    tags: [bigtech]
+
+  - name: Palantir
+    ats: lever
+    token: palantir
+    tags: [bigtech]

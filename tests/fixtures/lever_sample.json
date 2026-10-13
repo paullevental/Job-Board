@@ -1,0 +1,5 @@
+[
+  {"id": "aaa-111", "text": "Engineering Intern - Summer 2027", "hostedUrl": "https://jobs.lever.co/beta/aaa-111", "categories": {"location": "Vancouver, BC", "department": "Engineering", "team": "Core"}, "createdAt": 1759320000000},
+  {"id": "bbb-222", "text": "Director of Engineering", "hostedUrl": "https://jobs.lever.co/beta/bbb-222", "categories": {"location": "Remote - US", "department": "Engineering"}, "createdAt": 1757000000000},
+  {"id": "ccc-333", "text": "Stagiaire en génie logiciel", "hostedUrl": "https://jobs.lever.co/beta/ccc-333", "categories": {"location": "Montréal, QC", "department": "R&D"}, "createdAt": 1760000000000}
+]

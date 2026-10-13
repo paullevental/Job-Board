@@ -1,0 +1,5 @@
+{"jobs": [
+  {"id": "ash-1", "title": "Software Engineering Intern", "jobUrl": "https://jobs.ashbyhq.com/gamma/ash-1", "location": "London, UK", "department": "Engineering", "publishedAt": "2026-10-02T12:00:00Z"},
+  {"id": "ash-2", "title": "New Grad Software Engineer, 2027", "jobUrl": "https://jobs.ashbyhq.com/gamma/ash-2", "location": "Remote", "department": "Engineering", "publishedAt": "2026-10-08T12:00:00Z"},
+  {"id": "ash-3", "title": "Product Designer", "jobUrl": "https://jobs.ashbyhq.com/gamma/ash-3", "location": "Toronto, Canada", "department": "Design", "publishedAt": "2026-09-01T12:00:00Z"}
+]}
