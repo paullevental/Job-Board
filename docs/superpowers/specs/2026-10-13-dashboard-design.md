@@ -127,10 +127,15 @@ is enabled.
 `POST /api/poll`, which runs `poll_once` in a FastAPI background task. This makes
 the API a second writer, so two guards are required:
 
-- **`busy_timeout` pragma.** `db.py` currently sets `journal_mode`,
-  `synchronous` and `foreign_keys` but **not** `busy_timeout`. Without it a
-  concurrent write raises `database is locked` immediately instead of waiting.
-  Add `PRAGMA busy_timeout=5000`.
+- **`busy_timeout` pragma.** Corrected 2026-10-13: an earlier draft of this
+  spec claimed `db.py` had no busy timeout and that a concurrent write would
+  fail immediately. That was wrong — Python's `sqlite3.connect()` passes
+  `timeout=5.0`, so `PRAGMA busy_timeout` already reads 5000 and setting it to
+  5000 would have been a no-op. The real question is whether 5s is *enough*: a
+  cold-start poll commits ~4,300 rows in one transaction and can hold the write
+  lock longer. Raised deliberately to 15s (`db.BUSY_TIMEOUT_MS`), with a test
+  asserting it exceeds the pysqlite default so the value cannot silently
+  regress to a no-op.
 - **Single-flight lock.** An `app_meta` row `poll_lock` holding a timestamp.
   Acquire if absent or older than 10 minutes (stale-lock recovery after a crash).
   A second concurrent request gets `409 Conflict`, not a queued poll.
@@ -294,7 +299,17 @@ because the user applies to one specific location, not to a group. Triaging the
 group acts on every posting inside it; expanding lets the user pick one.
 
 This also means a feed page's row count and posting count differ, so the cursor
-pages over **postings** and the UI accumulates groups client-side.
+pages over **postings** and the UI accumulates groups client-side. A group can
+legitimately straddle a page boundary; the client merges by `(company_id, title)`
+as pages arrive. The invariant that must hold is that no *posting* appears on two
+pages, which the keyset predicate guarantees and a test covers.
+
+**Grouping alone does not fix company concentration.** Measured after
+implementing it: 203 open matches collapse to 146 groups — exactly the 28% of
+duplicate titles predicted — but Palantir still accounts for 36 of those 146
+groups (25%). The feed therefore also needs either per-company interleaving or a
+soft cap per company per page, decided in phase 4 when the feed is built. Without
+it the first screen is still one employer.
 
 **`last_feed_seen_at` advances only on an explicit action**, never on page load.
 If merely opening the dashboard advanced it, the "new since your last visit"

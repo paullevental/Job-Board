@@ -18,6 +18,8 @@ DEFAULT_DB = Path(
     or "job_poller.db"
 ).expanduser()
 
+BUSY_TIMEOUT_MS = 15_000
+
 _engine = None
 _Session: sessionmaker | None = None
 
@@ -36,6 +38,9 @@ def init_engine(url: str | None = None, echo: bool = False):
             cur.execute("PRAGMA journal_mode=WAL")
             cur.execute("PRAGMA synchronous=NORMAL")
             cur.execute("PRAGMA foreign_keys=ON")
+            # Raises pysqlite's 5s default. A cold-start poll commits thousands
+            # of rows at once and can hold the write lock for longer than that.
+            cur.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
             cur.close()
 
     Base.metadata.create_all(_engine)
