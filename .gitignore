@@ -1,12 +1,28 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets. .env.example is committed on purpose — it documents the keys.
+.env
+.env.*
+!.env.example
+
+# The database is local state, not source. WAL/SHM travel with it.
 *.db
 *.db-wal
 *.db-shm
-.venv/
-venv/
-.pytest_cache/
+
 *.jsonl
-.env
+.pytest_cache/
+.ruff_cache/
 .DS_Store
-*.egg-info/
+
+# Markdown is kept out of the repo, except the README.
+*.md
+!README.md
