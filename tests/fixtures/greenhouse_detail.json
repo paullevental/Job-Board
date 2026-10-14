@@ -1,0 +1,62 @@
+{
+  "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8805655002",
+  "data_compliance": [
+    {
+      "type": "gdpr",
+      "requires_consent": false,
+      "requires_processing_consent": false,
+      "requires_retention_consent": false,
+      "retention_period": null,
+      "demographic_data_consent_applies": false
+    }
+  ],
+  "internal_job_id": 6523784002,
+  "location": {
+    "name": "Tokyo, Japan"
+  },
+  "metadata": [
+    {
+      "id": 9740521002,
+      "name": "Company Assignment",
+      "value": "Databricks Japan K.K.",
+      "value_type": "single_select"
+    },
+    {
+      "id": 24059030002,
+      "name": "Career Page Posting Category",
+      "value": [
+        "Field Engineering"
+      ],
+      "value_type": "multi_select"
+    }
+  ],
+  "id": 8805655002,
+  "updated_at": "2026-10-06T07:04:54-04:00",
+  "requisition_id": "CSQ427R266",
+  "title": "デリバリーソリューションアーキテクト",
+  "company_name": "Databricks",
+  "first_published": "2026-09-16T09:11:57-04:00",
+  "language": "en",
+  "application_deadline": null,
+  "content": "&lt;p&gt;Req ID: CSQ427R266&lt;br&gt;Location: Tokyo, Japan&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Our Commitment to Diversity and Inclusion&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;日本語の完全な専門的習熟度が必須&lt;/li&gt;\n&lt;li&gt;ビジネスレベルの英語力があれば尚可&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;To learn more, follow Databricks on &lt;a href=&quot;https://www.linkedin.com/company/databricks&quot;&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;",
+  "departments": [
+    {
+      "id": 4001270002,
+      "name": "Delivery Solutions Architects",
+      "child_ids": [],
+      "parent_id": 4069106002
+    }
+  ],
+  "offices": [
+    {
+      "id": 4056345002,
+      "name": "Remote - Japan",
+      "location": "Remote - Japan",
+      "child_ids": [],
+      "parent_id": 4033856002
+    }
+  ],
+  "ai_disclaimer": null,
+  "include_ai_disclaimer": null,
+  "ai_opt_out_request_url": null
+}

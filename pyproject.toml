@@ -3,13 +3,21 @@ name = "job_poller"
 version = "0.1.0"
 description = "Watch company ATS boards for new internship and co-op postings."
 requires-python = ">=3.11"
-dependencies = ["httpx>=0.27", "SQLAlchemy>=2.0", "PyYAML>=6.0", "rich>=13.0"]
+dependencies = [
+    "httpx>=0.27",
+    "SQLAlchemy>=2.0",
+    "PyYAML>=6.0",
+    "rich>=13.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "nh3>=0.3.7",  # sanitizer kwargs verified on this release
+]
 
 [project.scripts]
 job_poller = "job_poller.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -20,5 +28,18 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["job_poller*"]
 
+[tool.ruff]
+line-length = 95
+
+[tool.ruff.lint]
+# Defects, not taste. ARG is excluded because pytest fixtures are "unused
+# arguments" by construction and the rule would cry wolf on every test file.
+select = ["F", "I", "UP", "B", "SIM"]
+# UP017 (datetime.UTC) would churn every module for no behavior change.
+ignore = ["UP017"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Starlette nags about httpx2 on every TestClient import. Upstream noise, not
+# ours: switching HTTP clients is a decision for the adapters, not the tests.
+filterwarnings = ["ignore::starlette.exceptions.StarletteDeprecationWarning"]

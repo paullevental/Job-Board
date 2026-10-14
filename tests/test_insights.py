@@ -279,3 +279,42 @@ def test_get_posting_returns_the_posting_with_its_company(session, company):
 
 def test_get_posting_returns_none_for_an_unknown_id(session):
     assert queries.get_posting(session, 999) is None
+
+
+# --- timing honesty ------------------------------------------------------
+
+
+def test_timing_report_says_history_is_too_thin(session, company):
+    add(session, company, "A", minutes=1, open_days=2)
+
+    report = queries.timing_report(session)
+
+    assert report.sufficient_data is False
+    assert report.history_days == pytest.approx(0, abs=0.01)
+    assert len(report.companies) == 1
+
+
+def test_timing_report_accepts_a_full_cycle_of_history(session, company):
+    add(session, company, "Last cycle", minutes=0, open_days=20)
+    add(session, company, "This cycle", minutes=60 * 24 * 200, open_days=14)
+
+    report = queries.timing_report(session)
+
+    assert report.history_days == pytest.approx(200, abs=0.1)
+    assert report.sufficient_data is True
+
+
+def test_timing_report_needs_closed_postings_not_just_a_long_span(session, company):
+    add(session, company, "Old still open", minutes=0)
+    add(session, company, "New still open", minutes=60 * 24 * 200)
+
+    # Nothing has closed, so there is no lifespan to report regardless of span.
+    assert queries.timing_report(session).sufficient_data is False
+
+
+def test_timing_report_is_empty_with_no_internships(session):
+    report = queries.timing_report(session)
+
+    assert report.companies == []
+    assert report.history_days == 0
+    assert report.sufficient_data is False

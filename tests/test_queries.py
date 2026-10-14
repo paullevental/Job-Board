@@ -23,7 +23,7 @@ def session():
 
 @pytest.fixture
 def company(session):
-    c = Company(name="Acme", ats="greenhouse", board_token="acme")
+    c = Company(name="Acme", ats="greenhouse", board_token="acme", tags="canada,toronto")
     session.add(c)
     session.flush()
     return c
@@ -243,3 +243,37 @@ def test_cursor_round_trips(session, company):
 def test_a_malformed_cursor_is_refused(session):
     with pytest.raises(ValueError, match="cursor"):
         queries.decode_cursor("not-a-real-cursor")
+
+
+def test_browse_filters_by_company_tag(session, company):
+    other = Company(name="Beta", ats="lever", board_token="beta", tags="usa")
+    session.add(other)
+    session.flush()
+    add(session, company, "Canadian Role", minutes=1)
+    add(session, other, "American Role", minutes=2)
+
+    page = queries.browse(session, tag="canada")
+
+    assert [p.title for p in page.postings] == ["Canadian Role"]
+
+
+def test_browse_filters_to_several_categories(session, company):
+    add(session, company, "Intern Role", category="intern", minutes=1)
+    add(session, company, "New Grad Role", category="new_grad", minutes=2)
+    add(session, company, "Staff Role", category="other", minutes=3)
+
+    page = queries.browse(session, categories=queries.MATCH_CATEGORIES)
+
+    assert [p.title for p in page.postings] == ["New Grad Role", "Intern Role"]
+
+
+def test_browse_applies_the_category_filter_before_the_limit(session, company):
+    """Filtering after the limit silently drops rows: three newer non-matches
+    would consume the whole page and the real match would never appear."""
+    add(session, company, "Intern Role", category="intern", minutes=1)
+    for i in range(3):
+        add(session, company, f"Staff Role {i}", category="other", minutes=10 + i)
+
+    page = queries.browse(session, categories=("intern",), limit=3)
+
+    assert [p.title for p in page.postings] == ["Intern Role"]

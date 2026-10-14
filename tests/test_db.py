@@ -48,3 +48,24 @@ def test_the_new_tables_are_created(isolated_engine, tmp_path):
         }
 
     assert {"applications", "application_events", "posting_details", "app_meta"} <= names
+
+
+def test_the_db_path_env_var_is_read_when_the_engine_is_created(
+    isolated_engine, tmp_path, monkeypatch
+):
+    """Resolved per call, not at import: a server or test that sets the variable
+    after importing `db` must still get the database it asked for."""
+    monkeypatch.setenv("JOB_POLLER_DB", str(tmp_path / "chosen.db"))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    engine = db.init_engine()
+
+    assert "chosen.db" in str(engine.url)
+
+
+def test_the_pre_rename_db_env_var_still_works(isolated_engine, tmp_path, monkeypatch):
+    monkeypatch.delenv("JOB_POLLER_DB", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("COOPWATCH_DB", str(tmp_path / "legacy.db"))
+
+    assert "legacy.db" in str(db.init_engine().url)

@@ -99,6 +99,24 @@ you sleep.
 Useful flags on `poll` and `watch`: `--canada-only`, `--engineering-only`,
 `--discord URL`, `--jsonl path`, `--concurrency N`.
 
+## Dashboard API
+
+A read-only HTTP API over the same database is in place (the React dashboard that
+consumes it is not built yet):
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn job_poller.api.asgi:app --reload    # http://127.0.0.1:8000/docs
+```
+
+`GET /api/feed` (triage feed, grouped by role, keyset-paginated) ·
+`/api/postings[/{id}]` (browse and detail) · `/api/applications` (pipeline by stage) ·
+`/api/companies` (board health) · `/api/insights/{stats,timing}` ·
+`/api/system/health` (is the poller alive).
+
+The poller stays a separate process. The API only reads what `watch` writes — SQLite
+in WAL mode supports that concurrently, which is why WAL is enabled.
+
 ## Design notes
 
 Three decisions carry most of the weight.
@@ -146,7 +164,7 @@ config/companies.yml   board list, tagged
 ## Tests
 
 ```bash
-python -m pytest tests/ -q          # 105 tests
+python -m pytest -q                 # 211 tests
 python tests/demo_offline.py        # full pipeline against fixtures
 ```
 

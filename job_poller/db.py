@@ -11,12 +11,20 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
 
-# COOPWATCH_DB is the pre-rename name, still read so existing setups keep working.
-DEFAULT_DB = Path(
-    os.environ.get("JOB_POLLER_DB")
-    or os.environ.get("COOPWATCH_DB")
-    or "job_poller.db"
-).expanduser()
+DEFAULT_DB_NAME = "job_poller.db"
+
+
+def default_db_path() -> Path:
+    """Resolved on every call, not once at import.
+
+    COOPWATCH_DB is the pre-rename name, still read so an existing local
+    database is not orphaned.
+    """
+    return Path(
+        os.environ.get("JOB_POLLER_DB")
+        or os.environ.get("COOPWATCH_DB")
+        or DEFAULT_DB_NAME
+    ).expanduser()
 
 BUSY_TIMEOUT_MS = 15_000
 
@@ -27,7 +35,7 @@ _Session: sessionmaker | None = None
 def init_engine(url: str | None = None, echo: bool = False):
     """Create the engine and ensure the schema exists."""
     global _engine, _Session
-    url = url or os.environ.get("DATABASE_URL") or f"sqlite:///{DEFAULT_DB}"
+    url = url or os.environ.get("DATABASE_URL") or f"sqlite:///{default_db_path()}"
     _engine = create_engine(url, echo=echo, future=True)
 
     if url.startswith("sqlite"):

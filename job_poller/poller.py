@@ -10,23 +10,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .ats import FetchResult, get_adapter
+from .ats.base import REQUEST_HEADERS
 from .classify import Category, classify
-from .models import Company, Posting, PollRun, utcnow
+from .models import Company, PollRun, Posting, utcnow
 
 log = logging.getLogger("job_poller.poller")
-
-USER_AGENT = (
-    "job_poller/0.1 (student internship tracker; "
-    "polite polling; contact via repository)"
-)
-
 
 @dataclass
 class PollConfig:
@@ -88,7 +82,7 @@ async def fetch_all(companies: list[Company], cfg: PollConfig | None = None) -> 
         timeout=cfg.timeout_s,
         limits=limits,
         follow_redirects=True,
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+        headers=REQUEST_HEADERS,
     ) as client:
         return await asyncio.gather(*(_fetch_one(client, sem, c, cfg) for c in companies))
 

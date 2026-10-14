@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from job_poller.ats import AshbyAdapter, GreenhouseAdapter, LeverAdapter  # noqa: E402
 from job_poller.ats.base import FetchResult  # noqa: E402
-from job_poller.models import Base, Company, Posting, PollRun  # noqa: E402
+from job_poller.models import Base, Company, PollRun, Posting  # noqa: E402
 from job_poller.notify import ConsoleNotifier, dispatch  # noqa: E402
 from job_poller.poller import apply_results  # noqa: E402
 

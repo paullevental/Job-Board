@@ -7,7 +7,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Index, Integer, String, Text, TypeDecorator,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -63,7 +70,7 @@ class Company(Base):
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
 
-    postings: Mapped[list["Posting"]] = relationship(back_populates="company")
+    postings: Mapped[list[Posting]] = relationship(back_populates="company")
 
     __table_args__ = (UniqueConstraint("ats", "board_token", name="uq_company_board"),)
 
@@ -104,8 +111,8 @@ class Posting(Base):
     notified_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), default=None)
 
     company: Mapped[Company] = relationship(back_populates="postings")
-    application: Mapped["Application | None"] = relationship(back_populates="posting")
-    detail: Mapped["PostingDetail | None"] = relationship(back_populates="posting")
+    application: Mapped[Application | None] = relationship(back_populates="posting")
+    detail: Mapped[PostingDetail | None] = relationship(back_populates="posting")
 
     __table_args__ = (
         UniqueConstraint("ats", "external_id", "company_id", name="uq_posting_identity"),
@@ -169,7 +176,7 @@ class Application(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
 
     posting: Mapped[Posting] = relationship(back_populates="application")
-    events: Mapped[list["ApplicationEvent"]] = relationship(
+    events: Mapped[list[ApplicationEvent]] = relationship(
         back_populates="application", order_by="ApplicationEvent.id"
     )
 

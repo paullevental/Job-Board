@@ -7,6 +7,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
 
+import httpx
+
+# Sent on every request to every vendor, from the poller and the API alike.
+USER_AGENT = (
+    "job_poller/0.1 (student internship tracker; "
+    "polite polling; contact via repository)"
+)
+REQUEST_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+
 
 @dataclass(frozen=True)
 class RawPosting:
@@ -28,7 +37,7 @@ class RawPosting:
         """Collapses the same role listed on more than one board."""
         norm_title = " ".join(self.title.lower().split())
         norm_loc = " ".join(self.location.lower().replace(",", " ").split())
-        return hashlib.sha256(f"{norm_title}\x1f{norm_loc}".encode("utf-8")).hexdigest()[:32]
+        return hashlib.sha256(f"{norm_title}\x1f{norm_loc}".encode()).hexdigest()[:32]
 
 
 @dataclass
@@ -42,12 +51,58 @@ class FetchResult:
     fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+@dataclass
+class DetailResult:
+    """One posting's description, as the vendor returned it.
+
+    `html` is raw and untrusted here -- sanitizing is `details.py`'s job, and
+    keeping the two separate means an adapter cannot accidentally be the thing
+    that decides what is safe to store.
+    """
+
+    ok: bool
+    html: str = ""
+    error: str | None = None
+
+
+def payload_is_posting(payload: dict, external_id: str) -> bool:
+    """Whether a single-posting response is the posting we asked for.
+
+    Requests follow redirects, so a board can answer with a different job than
+    the one requested. Serving that under our posting's id would be quietly
+    wrong. A payload with no `id` at all is accepted -- absence is not evidence
+    of a mismatch.
+    """
+    returned = payload.get("id")
+    return returned is None or str(returned) == str(external_id)
+
+
+def describe_error(exc: Exception) -> str:
+    """A short, honest failure reason that is safe to show a client.
+
+    Deliberately not `str(exc)`: httpx puts the full request URL in
+    `HTTPStatusError`, and that URL contains the board token. The status code is
+    the useful part; the rest belongs in the log.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"board returned {exc.response.status_code}"
+    if isinstance(exc, httpx.TimeoutException):
+        return "board did not respond in time"
+    return type(exc).__name__
+
+
 class ATSAdapter(Protocol):
     name: str
 
     def board_url(self, token: str) -> str: ...
 
     async def fetch(self, client, token: str) -> FetchResult: ...
+
+    async def fetch_detail(self, client, token: str, external_id: str) -> DetailResult: ...
+
+    # `external_id` is part of the uniform signature even though only Ashby needs
+    # it to locate the posting: Greenhouse and Lever address it in the URL.
+    def parse_detail(self, payload: dict, external_id: str) -> str: ...
 
 
 def parse_iso(value: str | None) -> datetime | None:

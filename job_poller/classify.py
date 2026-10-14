@@ -187,7 +187,10 @@ def classify(title: str, location: str = "", department: str = "") -> Classifica
     # An internship title plus a seniority marker usually means a role that
     # *manages* interns -- but "Software Engineer Intern II" is a real posting,
     # so only veto when the seniority word is not adjacent to an intern marker.
-    if category is not Category.OTHER and _SENIORITY_RE.search(title):
+    # noqa kept deliberately: the two conditions say different things ("looks
+    # senior" then "unless it is Intern II"), and merging them buys one line at
+    # the cost of a three-line boolean.
+    if category is not Category.OTHER and _SENIORITY_RE.search(title):  # noqa: SIM102
         if not re.search(r"\b(?:intern|co[\s\-]?op)\b\s*(?:ii+|[2-9])\b", title, re.IGNORECASE):
             category = Category.OTHER
             reasons.append("vetoed: seniority marker in title")

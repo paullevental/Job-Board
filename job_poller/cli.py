@@ -7,17 +7,16 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from . import __version__
-from .ats import get_adapter
+from . import __version__, queries
 from .config import load_specs, sync_companies
 from .db import init_engine, session_scope
-from .models import Company, Posting, PollRun, utcnow
+from .models import Company, utcnow
 from .notify import ConsoleNotifier, DiscordNotifier, JsonlNotifier, dispatch
 from .poller import PollConfig, fetch_all, poll_once
 
@@ -161,18 +160,16 @@ def cmd_watch(args) -> int:
 
 def cmd_list(args) -> int:
     with session_scope() as session:
-        stmt = select(Posting).join(Company)
-        if args.open:
-            stmt = stmt.where(Posting.closed_at.is_(None))
-        if not args.all_categories:
-            stmt = stmt.where(Posting.category != "other")
-        if args.canada_only:
-            stmt = stmt.where(Posting.canada_eligible.is_(True))
-        if args.tag:
-            stmt = stmt.where(Company.tags.contains(args.tag))
-        stmt = stmt.order_by(Posting.first_seen_at.desc()).limit(args.limit)
+        page = queries.browse(
+            session,
+            limit=args.limit,
+            open_only=args.open,
+            canada_only=args.canada_only,
+            tag=args.tag,
+            categories=None if args.all_categories else queries.MATCH_CATEGORIES,
+        )
+        rows = page.postings
 
-        rows = list(session.scalars(stmt))
         if not rows:
             console.print("[dim]Nothing matches.[/dim]")
             return 0
@@ -201,80 +198,62 @@ def cmd_list(args) -> int:
 
 def cmd_stats(args) -> int:
     with session_scope() as session:
-        total = session.scalar(select(func.count()).select_from(Posting)) or 0
-        open_now = session.scalar(
-            select(func.count()).select_from(Posting).where(Posting.closed_at.is_(None))
-        ) or 0
-        matches = session.scalar(
-            select(func.count()).select_from(Posting).where(Posting.category != "other")
-        ) or 0
-        canada = session.scalar(
-            select(func.count()).select_from(Posting)
-            .where(Posting.category != "other", Posting.canada_eligible.is_(True))
-        ) or 0
-        boards = session.scalar(
-            select(func.count()).select_from(Company).where(Company.active.is_(True))
-        ) or 0
+        stats = queries.stats(session)
 
         console.print("\n[bold]Coverage[/bold]")
-        console.print(f"  active boards      {boards}")
-        console.print(f"  postings tracked   {total}  ({open_now} open)")
-        console.print(f"  intern / new grad  {matches}  ({canada} Canada-eligible)")
+        console.print(f"  active boards      {stats.active_boards}")
+        console.print(
+            f"  postings tracked   {stats.postings_total}  ({stats.postings_open} open)"
+        )
+        console.print(
+            f"  intern / new grad  {stats.matches_total}  "
+            f"({stats.matches_canada} Canada-eligible)"
+        )
 
-        # Median is over closed postings only.
-        closed = list(session.scalars(select(Posting).where(Posting.closed_at.is_not(None))))
-        if closed:
-            spans = sorted(p.days_open for p in closed)
-            median = spans[len(spans) // 2]
-            console.print(f"\n[bold]Posting lifespan[/bold] (n={len(spans)})")
-            console.print(f"  median open        {median:.1f} days")
-            console.print(f"  shortest           {spans[0]:.1f} days")
-            console.print(f"  longest            {spans[-1]:.1f} days")
+        life = stats.lifespan
+        if life.closed_count:
+            console.print(f"\n[bold]Posting lifespan[/bold] (n={life.closed_count})")
+            console.print(f"  median open        {life.median_days:.1f} days")
+            console.print(f"  shortest           {life.shortest_days:.1f} days")
+            console.print(f"  longest            {life.longest_days:.1f} days")
         else:
-            console.print("\n[dim]No closed postings yet — lifespan stats need a few weeks of history.[/dim]")
+            console.print(
+                "\n[dim]No closed postings yet — lifespan stats need a few weeks of history.[/dim]"
+            )
 
-        last_runs = list(session.scalars(select(PollRun).order_by(PollRun.started_at.desc()).limit(5)))
-        if last_runs:
+        if stats.recent_runs:
             console.print("\n[bold]Recent runs[/bold]")
-            for r in last_runs:
+            for r in stats.recent_runs:
                 dur = f"{r.duration_s:.1f}s" if r.duration_s else "—"
                 console.print(
                     f"  {r.started_at.strftime('%b %d %H:%M')}  "
                     f"{r.boards_ok}/{r.boards_attempted} ok · {r.matches_new} new matches · {dur}"
                 )
-            newest = last_runs[0].started_at
-            if newest.tzinfo is None:
-                newest = newest.replace(tzinfo=timezone.utc)
-            stale = utcnow() - newest
-            if stale > timedelta(hours=6):
-                console.print(f"\n[yellow]Last run was {stale.total_seconds() / 3600:.0f}h ago — is the watcher running?[/yellow]")
 
-        unhealthy = list(session.scalars(
-            select(Company).where(Company.consecutive_failures >= 3, Company.active.is_(True))
-        ))
-        if unhealthy:
-            console.print(f"\n[yellow]{len(unhealthy)} boards failing repeatedly[/yellow]")
-            for c in unhealthy[:10]:
-                console.print(f"  {c.name} ({c.ats}:{c.board_token}) — {c.last_error}")
+        # Liveness comes from the same rule the dashboard header uses, so the two
+        # can never disagree about whether the poller is alive.
+        health = queries.system_health(session)
+        if health.state in ("amber", "red") and health.stale_seconds:
+            console.print(
+                f"\n[yellow]Last run was {health.stale_seconds / 3600:.0f}h ago "
+                f"— is the watcher running?[/yellow]"
+            )
+
+        failing = [h for h in queries.company_health(session) if h.state == "failing"]
+        if failing:
+            console.print(f"\n[yellow]{len(failing)} boards failing repeatedly[/yellow]")
+            for h in failing[:10]:
+                console.print(f"  {h.name} ({h.ats}:{h.board_token}) — {h.last_error}")
     return 0
 
 
 def cmd_timing(args) -> int:
     """When does each company actually post? Needs a season of history."""
     with session_scope() as session:
-        stmt = (
-            select(Posting).join(Company)
-            .where(Posting.category == "intern")
-            .order_by(Posting.first_seen_at)
-        )
-        rows = list(session.scalars(stmt))
-        if not rows:
+        report = queries.timing_report(session)
+        if not report.companies:
             console.print("[dim]No internship postings recorded yet.[/dim]")
             return 0
-
-        by_company: dict[str, list[Posting]] = {}
-        for p in rows:
-            by_company.setdefault(p.company.name, []).append(p)
 
         table = Table(show_header=True, header_style="bold")
         table.add_column("Company")
@@ -283,21 +262,22 @@ def cmd_timing(args) -> int:
         table.add_column("Most recent")
         table.add_column("Median days open", justify="right")
 
-        for name, posts in sorted(by_company.items(), key=lambda kv: -len(kv[1])):
-            closed = [p for p in posts if p.closed_at]
-            med = "—"
-            if closed:
-                spans = sorted(p.days_open for p in closed)
-                med = f"{spans[len(spans) // 2]:.0f}"
+        for row in report.companies:
+            median = "—" if row.median_days_open is None else f"{row.median_days_open:.0f}"
             table.add_row(
-                name,
-                str(len(posts)),
-                posts[0].first_seen_at.strftime("%b %d, %Y"),
-                posts[-1].first_seen_at.strftime("%b %d, %Y"),
-                med,
+                row.company_name,
+                str(row.posting_count),
+                row.first_seen_at.strftime("%b %d, %Y"),
+                row.latest_seen_at.strftime("%b %d, %Y"),
+                median,
             )
         console.print(table)
-        console.print("[dim]This gets genuinely useful after a full co-op cycle of data.[/dim]")
+
+        if not report.sufficient_data:
+            console.print(
+                f"[dim]{report.history_days:.0f} days of history so far. "
+                f"This gets genuinely useful after a full co-op cycle of data.[/dim]"
+            )
     return 0
 
 

@@ -10,12 +10,15 @@ guards, a single network blip would close every posting at a company and then
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
+from job_poller import poller as poller_module
 from job_poller.ats.base import FetchResult, RawPosting
-from job_poller.models import Base, Company, Posting, PollRun
+from job_poller.models import Base, Company, PollRun, Posting, PostingDetail
 
 
 @pytest.fixture
@@ -197,3 +200,47 @@ class TestRunAudit:
         assert run.postings_new == 2
         assert run.matches_new == 1
         assert run.finished_at is not None
+
+
+class TestPollingCostIsUnchanged:
+    """Descriptions are fetched on demand, never by a poll.
+
+    This is a binding constraint, not a preference: a poll reads every board
+    every few minutes, and pulling descriptions there would inflate the payload
+    roughly 13x for text nobody has asked to read.
+    """
+
+    def test_a_poll_stores_no_descriptions(self, session, company):
+        run_cycle(session, company, [posting("1"), posting("2")])
+
+        assert session.scalar(select(func.count()).select_from(PostingDetail)) == 0
+
+    def test_a_poll_leaves_an_existing_cached_description_alone(self, session, company):
+        run_cycle(session, company, [posting("1")])
+        stored = session.scalar(select(Posting).where(Posting.external_id == "1"))
+        session.add(
+            PostingDetail(posting_id=stored.id, content_html="<p>Cached once</p>")
+        )
+        session.flush()
+
+        # The posting changes title, which rewrites the posting row.
+        run_cycle(session, company, [posting("1", title="Software Engineer Intern II")])
+
+        detail = session.get(PostingDetail, stored.id)
+        assert detail.content_html == "<p>Cached once</p>"
+        assert detail.fetch_error is None
+
+    def test_the_board_listing_url_never_requests_content(self):
+        """Greenhouse's `content=true` is the specific flag that inflates it."""
+        from job_poller.ats.greenhouse import API
+
+        assert "content=true" not in API
+
+
+def test_the_poll_path_never_reaches_the_description_fetcher():
+    """Row counts alone would not catch a poll that fetched descriptions and
+    discarded them -- the requests would still have been made."""
+    source = pathlib.Path(poller_module.__file__).read_text()
+
+    assert "fetch_detail" not in source
+    assert "details" not in source
