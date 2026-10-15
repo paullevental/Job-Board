@@ -18,6 +18,10 @@ ENV/
 *.db-wal
 *.db-shm
 
+# Frontend build artefacts
+node_modules/
+web/dist/
+
 *.jsonl
 .pytest_cache/
 .ruff_cache/

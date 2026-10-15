@@ -19,6 +19,16 @@ from .models import Application, Company, PollRun, Posting, utcnow
 from .tracking import Status
 
 DEFAULT_LIMIT = 25
+
+# Secondary sort key. A cold start gives every posting the same `first_seen_at`,
+# which then carries no information at all -- measured: 204 open matches, one
+# distinct value -- and the feed degenerates into board insertion order, so the
+# first screen is a single employer. The employer's own publication date is the
+# real signal, and as a *tiebreaker* it changes nothing in steady state.
+_POSTED_AT = func.coalesce(Posting.ats_posted_at, Posting.first_seen_at)
+# Bumped when the cursor's shape changes, so a stale cursor held by an open
+# browser is rejected as malformed rather than silently misread.
+CURSOR_VERSION = "2"
 MATCH_CATEGORIES = ("intern", "new_grad")
 UNTRACKED = "untracked"
 
@@ -180,40 +190,57 @@ def pipeline(session: Session) -> dict[Status, list[Application]]:
     return buckets
 
 
-def encode_cursor(first_seen_at: datetime, posting_id: int) -> str:
-    raw = f"{first_seen_at.isoformat()}|{posting_id}"
+def encode_cursor(first_seen_at: datetime, posted_at: datetime, posting_id: int) -> str:
+    raw = f"{CURSOR_VERSION}|{first_seen_at.isoformat()}|{posted_at.isoformat()}|{posting_id}"
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-def decode_cursor(cursor: str) -> tuple[datetime, int]:
+def decode_cursor(cursor: str) -> tuple[datetime, datetime, int]:
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
-        iso, _, posting_id = raw.rpartition("|")
-        parsed = datetime.fromisoformat(iso)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed, int(posting_id)
+        version, seen_iso, posted_iso, posting_id = raw.split("|")
+        if version != CURSOR_VERSION:
+            raise ValueError(f"cursor version {version!r}")
+        return _utc(seen_iso), _utc(posted_iso), int(posting_id)
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
         raise ValueError(f"malformed cursor {cursor!r}") from exc
 
 
+def _utc(iso: str) -> datetime:
+    parsed = datetime.fromisoformat(iso)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def _after(cursor: str):
     """Keyset predicate. Offset paging would duplicate rows as new postings arrive."""
-    seen_at, posting_id = decode_cursor(cursor)
+    seen_at, posted_at, posting_id = decode_cursor(cursor)
+    # noqa SIM300 twice below: `_POSTED_AT` is a SQL expression, not a constant.
+    # Ruff reads it as a Yoda condition; flipping it would emit the same SQL while
+    # reading backwards next to the column comparisons around it.
     return or_(
         Posting.first_seen_at < seen_at,
-        and_(Posting.first_seen_at == seen_at, Posting.id < posting_id),
+        and_(Posting.first_seen_at == seen_at, _POSTED_AT < posted_at),  # noqa: SIM300
+        and_(
+            Posting.first_seen_at == seen_at,
+            _POSTED_AT == posted_at,  # noqa: SIM300
+            Posting.id < posting_id,
+        ),
     )
 
 
 def _page(session: Session, stmt, limit: int) -> tuple[list[Posting], str | None]:
-    stmt = stmt.order_by(Posting.first_seen_at.desc(), Posting.id.desc()).limit(limit + 1)
+    stmt = stmt.order_by(
+        Posting.first_seen_at.desc(), _POSTED_AT.desc(), Posting.id.desc()
+    ).limit(limit + 1)
     rows = list(session.scalars(stmt))
 
     if len(rows) <= limit:
         return rows, None
     rows = rows[:limit]
-    return rows, encode_cursor(rows[-1].first_seen_at, rows[-1].id)
+    last = rows[-1]
+    return rows, encode_cursor(
+        last.first_seen_at, last.ats_posted_at or last.first_seen_at, last.id
+    )
 
 
 def _group(postings: list[Posting]) -> list[FeedGroup]:

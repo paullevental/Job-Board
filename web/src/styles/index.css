@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* Self-hosted. No CDN, no Google Fonts request — the app makes no off-origin
+ * requests at all, which is also why it will work from a laptop on bad wifi. */
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
+@import "./tokens.css";
+
+/* Expose the tokens to Tailwind v4's utility generation. v4 is CSS-first: this
+ * replaces tailwind.config.js entirely. */
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-rail: var(--rail);
+  --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-fresh: var(--fresh);
+  --color-fresh-dim: var(--fresh-dim);
+  --color-applied: var(--applied);
+  --color-stage: var(--stage);
+  --color-rejected: var(--rejected);
+
+  --font-title: var(--font-title);
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  color-scheme: dark light;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numerals must be tabular wherever they sit in a column the eye scans down:
+ * dates, day counts, location counts. Proportional digits shimmer while
+ * scrolling and make a list look unaligned even when it is. */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--fresh);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Purposeful motion only, and never for anyone who asked it to stop. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

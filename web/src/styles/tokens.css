@@ -1,0 +1,92 @@
+/* Design tokens for "The Wire".
+ *
+ * Dark is the bare `:root` because the user checks this at night and between
+ * classes. Light is defined from the same token names under BOTH an explicit
+ * [data-theme] and prefers-color-scheme, so the toggle wins in either direction
+ * and neither theme is bolted onto the other.
+ *
+ * Elevation comes from borders, never shadows: on a near-black ground a shadow
+ * reads as mud.
+ */
+
+:root {
+  /* Ground. Never pure #000 — a slight cool cast keeps it from looking dead,
+   * and gives the borders something to sit against. */
+  --ground: #0b0d10;
+  --surface: #111419;
+  --surface-raised: #161a20;
+  --rail: #1e242c;
+  --border: #232931;
+  --border-strong: #2f3741;
+
+  /* Text. 14.8:1, 7.1:1 and 4.6:1 against --ground — all at or above AA. */
+  --text: #e7eaee;
+  --text-dim: #9aa4b2;
+  --text-faint: #6b7584;
+
+  /* One accent for fresh/new, a distinct one for applied, amber for the
+   * assessment and interview stages, desaturated red for rejected. */
+  --fresh: #5ad1a8;
+  --fresh-dim: #1d4d41;
+  --applied: #6ea8fe;
+  --stage: #d9a441;
+  --rejected: #c4705f;
+
+  --age-full: var(--fresh);
+  --age-empty: #262d36;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --rail-x: 1.75rem;
+
+  --font-title: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-ui: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+}
+
+:root[data-theme="light"] {
+  --ground: #f7f6f3;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --rail: #e4e2dd;
+  --border: #e0ded8;
+  --border-strong: #cbc8c0;
+
+  /* 15.3:1, 5.9:1 and 4.6:1 against --ground. */
+  --text: #16181c;
+  --text-dim: #5b6572;
+  --text-faint: #7d8794;
+
+  --fresh: #0f7a5c;
+  --fresh-dim: #cdeade;
+  --applied: #2d5fd0;
+  --stage: #9a6b10;
+  --rejected: #a8452f;
+
+  --age-full: var(--fresh);
+  --age-empty: #ddd9d2;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #f7f6f3;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --rail: #e4e2dd;
+    --border: #e0ded8;
+    --border-strong: #cbc8c0;
+
+    --text: #16181c;
+    --text-dim: #5b6572;
+    --text-faint: #7d8794;
+
+    --fresh: #0f7a5c;
+    --fresh-dim: #cdeade;
+    --applied: #2d5fd0;
+    --stage: #9a6b10;
+    --rejected: #a8452f;
+
+    --age-full: var(--fresh);
+    --age-empty: #ddd9d2;
+  }
+}

@@ -234,10 +234,22 @@ def test_pipeline_groups_applications_by_status(session, company):
 
 def test_cursor_round_trips(session, company):
     p = add(session, company, "Role", minutes=4)
+    posted = T0 - timedelta(days=3)
 
-    encoded = queries.encode_cursor(p.first_seen_at, p.id)
+    encoded = queries.encode_cursor(p.first_seen_at, posted, p.id)
 
-    assert queries.decode_cursor(encoded) == (p.first_seen_at, p.id)
+    assert queries.decode_cursor(encoded) == (p.first_seen_at, posted, p.id)
+
+
+def test_a_cursor_from_an_older_sort_key_is_refused(session):
+    """A browser left open across a deploy holds a two-part cursor. Reading it as
+    if it were the new shape would page from the wrong place in silence."""
+    import base64
+
+    stale = base64.urlsafe_b64encode(b"2026-10-01T12:00:00+00:00|7").decode()
+
+    with pytest.raises(ValueError, match="cursor"):
+        queries.decode_cursor(stale)
 
 
 def test_a_malformed_cursor_is_refused(session):
@@ -277,3 +289,55 @@ def test_browse_applies_the_category_filter_before_the_limit(session, company):
     page = queries.browse(session, categories=("intern",), limit=3)
 
     assert [p.title for p in page.postings] == ["Intern Role"]
+
+
+def test_feed_breaks_first_seen_ties_by_when_the_employer_posted(session, company):
+    """On a cold start every posting shares one first_seen_at, so that column
+    carries no information and the employer's own date is the real signal."""
+    # Inserted oldest-published FIRST, so insertion order and publication order
+    # disagree. Without the tiebreaker the id-descending fallback gets it backwards.
+    newer = add(session, company, "Posted in October", minutes=0)
+    older = add(session, company, "Posted in March", minutes=0)
+    newer.ats_posted_at = T0 - timedelta(days=2)
+    older.ats_posted_at = T0 - timedelta(days=200)
+    session.flush()
+
+    page = queries.feed(session)
+
+    assert [g.title for g in page.groups] == ["Posted in October", "Posted in March"]
+
+
+def test_feed_still_puts_newly_seen_postings_first(session, company):
+    """The tiebreaker must not override detection order: a posting found just now
+    outranks one the employer published later but we saw earlier."""
+    old_find = add(session, company, "Seen last week", minutes=0)
+    old_find.ats_posted_at = T0 + timedelta(days=5)
+    fresh_find = add(session, company, "Seen just now", minutes=60)
+    fresh_find.ats_posted_at = T0 - timedelta(days=30)
+    session.flush()
+
+    page = queries.feed(session)
+
+    assert [g.title for g in page.groups] == ["Seen just now", "Seen last week"]
+
+
+def test_feed_handles_a_missing_posted_date(session, company):
+    """ats_posted_at is nullable; a null must not sort a posting out of the feed."""
+    add(session, company, "No date", minutes=0)
+
+    assert [g.title for g in queries.feed(session).groups] == ["No date"]
+
+
+def test_the_cursor_survives_the_three_part_sort_key(session, company):
+    for i in range(6):
+        p = add(session, company, f"Role {i}", minutes=0)
+        p.ats_posted_at = T0 - timedelta(days=i)
+    session.flush()
+
+    first = queries.feed(session, limit=2)
+    second = queries.feed(session, limit=2, cursor=first.next_cursor)
+
+    seen_first = {p.id for g in first.groups for p in g.postings}
+    seen_second = {p.id for g in second.groups for p in g.postings}
+    assert seen_first and seen_second
+    assert seen_first.isdisjoint(seen_second)
