@@ -6,7 +6,9 @@ state, so "nothing new" and "the poller died three days ago" look different.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Query
 
 from ... import queries
 from ..deps import SessionDep
@@ -20,7 +22,10 @@ DEFAULT_POLL_INTERVAL_S = 300
 
 
 @router.get("/health", response_model=HealthOut)
-def health(session: SessionDep, expected_interval_s: int = DEFAULT_POLL_INTERVAL_S) -> HealthOut:
+def health(
+    session: SessionDep,
+    expected_interval_s: Annotated[int, Query(ge=1)] = DEFAULT_POLL_INTERVAL_S,
+) -> HealthOut:
     return HealthOut.from_health(
         queries.system_health(session, expected_interval_s=expected_interval_s)
     )

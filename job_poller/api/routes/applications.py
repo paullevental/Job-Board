@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from ... import queries
 from ...tracking import Status
-from ..deps import SessionDep
+from ..deps import DbIdPath, SessionDep
 from ..errors import not_found
 from ..schemas import ApplicationOut, EventOut, EventsOut, PipelineColumnOut, PipelineOut
 
@@ -36,7 +36,7 @@ def pipeline(session: SessionDep, status: Status | None = None) -> PipelineOut:
 
 
 @router.get("/{application_id}/events", response_model=EventsOut)
-def events(application_id: int, session: SessionDep) -> EventsOut:
+def events(application_id: DbIdPath, session: SessionDep) -> EventsOut:
     """The append-only transition log, oldest first."""
     app = queries.get_application_by_id(session, application_id)
     if app is None:

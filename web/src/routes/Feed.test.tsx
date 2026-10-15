@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { Feed } from "./Feed";
 import type { FeedPage, Posting, SystemHealth } from "../lib/types";
@@ -173,5 +174,114 @@ describe("the wire", () => {
 
     expect(await screen.findByText(/everything open right now/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /older postings/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("states that must never lie", () => {
+  test("a failed health check does not become a false Caught up", async () => {
+    // Invariant 3: an empty feed must never be ambiguous between "nothing new"
+    // and "the poller died". With health unknown we cannot claim either.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("/api/system/health")) return new Response("", { status: 500 });
+        return new Response(JSON.stringify(page({ groups: [], fresh_count: 0 })), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    render(<Feed />);
+
+    expect(await screen.findByText(/cannot confirm/i)).toBeInTheDocument();
+    expect(screen.queryByText("Caught up")).not.toBeInTheDocument();
+  });
+
+  test("an empty filtered feed says the filter emptied it", async () => {
+    const user = userEvent.setup();
+    let filtered = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("/api/system/health"))
+          return new Response(JSON.stringify(health("green")), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        const body = url.includes("canada_only")
+          ? page({ groups: [], fresh_count: 0 })
+          : page();
+        if (url.includes("canada_only")) filtered = true;
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    render(<Feed />);
+    await screen.findByText("SWE Intern");
+    await user.click(screen.getByRole("button", { name: /canada only/i }));
+
+    expect(filtered).toBe(true);
+    expect(await screen.findByText(/no canada-eligible roles/i)).toBeInTheDocument();
+    expect(screen.queryByText("Caught up")).not.toBeInTheDocument();
+  });
+
+  test("a failed older-postings page keeps the rows already loaded", async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("/api/system/health"))
+          return new Response(JSON.stringify(health("green")), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        calls += 1;
+        if (calls > 1) {
+          return new Response(
+            JSON.stringify({ error: { code: "internal_error", message: "page failed" } }),
+            { status: 500, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify(page({ next_cursor: "c1" })), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    render(<Feed />);
+    await screen.findByText("SWE Intern");
+    await user.click(screen.getByRole("button", { name: /older postings/i }));
+
+    // The failure concerns one page, not the column the user already read.
+    expect(await screen.findByText(/page failed/i)).toBeInTheDocument();
+    expect(screen.getByText("SWE Intern")).toBeInTheDocument();
+  });
+
+  test("the feed announces its state to assistive technology", async () => {
+    mockApi(page());
+
+    render(<Feed />);
+    await screen.findByText("SWE Intern");
+
+    const live = document.querySelector("[aria-live]");
+    expect(live).not.toBeNull();
+    expect(live!.textContent).toMatch(/role/i);
+  });
+
+  test("the fresh band never reports more than its maximum", async () => {
+    mockApi(page({ fresh_count: 204 }));
+
+    render(<Feed />);
+    const bar = await screen.findByRole("progressbar");
+
+    expect(Number(bar.getAttribute("aria-valuenow"))).toBeLessThanOrEqual(
+      Number(bar.getAttribute("aria-valuemax")),
+    );
   });
 });

@@ -300,7 +300,7 @@ def _fail_only_writes(session, monkeypatch, error):
     real_flush = session.flush
 
     def flush(*args, **kwargs):
-        if session.new:
+        if session.new or session.dirty:
             raise error
         return real_flush(*args, **kwargs)
 
@@ -357,3 +357,16 @@ def test_to_text_normalizes_non_breaking_spaces():
 
     assert " " not in text
     assert "Toronto ON" in text
+
+
+def test_a_locked_database_does_not_break_a_retry_either(session, posting, monkeypatch):
+    """The retry path updates an existing row rather than inserting one. Reading
+    an attribute off that row after a failed flush raises PendingRollbackError,
+    which is not an OperationalError and so escaped the guard entirely."""
+    details.get_or_fetch(session, posting, fetch=fails("timed out"))
+    _fail_only_writes(session, monkeypatch, OperationalError("UPDATE", {}, Exception("locked")))
+
+    detail = details.get_or_fetch(session, posting, fetch=ok("<p>Fetched anyway</p>"))
+
+    assert "Fetched anyway" in detail.content_html
+    assert detail.fetch_error is None

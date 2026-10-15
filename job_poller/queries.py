@@ -29,6 +29,8 @@ _POSTED_AT = func.coalesce(Posting.ats_posted_at, Posting.first_seen_at)
 # Bumped when the cursor's shape changes, so a stale cursor held by an open
 # browser is rejected as malformed rather than silently misread.
 CURSOR_VERSION = "2"
+# Mirrors the API bound; a cursor is just an id in a wrapper.
+MAX_DB_INT = 2**63 - 1
 MATCH_CATEGORIES = ("intern", "new_grad")
 UNTRACKED = "untracked"
 
@@ -107,7 +109,15 @@ def feed(
         fresh = fresh.where(Posting.first_seen_at > since)
     fresh_count = session.scalar(fresh) or 0
 
-    stmt = select(Posting).options(selectinload(Posting.company)).where(*conditions)
+    # `application` is eager-loaded for the same reason browse does it: every
+    # serialized row reports its tracked status, and lazily that is one extra
+    # query per posting -- 25 round-trips a page, each returning NULL by
+    # construction, since the feed excludes tracked postings.
+    stmt = (
+        select(Posting)
+        .options(selectinload(Posting.company), selectinload(Posting.application))
+        .where(*conditions)
+    )
     if cursor is not None:
         stmt = stmt.where(_after(cursor))
 
@@ -163,7 +173,10 @@ def browse(
     if year is not None:
         stmt = stmt.where(Posting.year == year)
     if q:
-        stmt = stmt.where(Posting.title.ilike(f"%{q}%"))
+        # `%` and `_` are LIKE wildcards: unescaped, a search for "%" matches
+        # every row, which is the opposite of searching.
+        pattern = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(Posting.title.ilike(f"%{pattern}%", escape="\\"))
     if status == UNTRACKED:
         stmt = stmt.where(~Posting.id.in_(select(Application.posting_id)))
     elif status is not None:
@@ -201,9 +214,12 @@ def decode_cursor(cursor: str) -> tuple[datetime, datetime, int]:
         version, seen_iso, posted_iso, posting_id = raw.split("|")
         if version != CURSOR_VERSION:
             raise ValueError(f"cursor version {version!r}")
-        return _utc(seen_iso), _utc(posted_iso), int(posting_id)
+        parsed_id = int(posting_id)
+        if not 0 <= parsed_id <= MAX_DB_INT:
+            raise ValueError(f"cursor id {parsed_id} is out of range")
+        return _utc(seen_iso), _utc(posted_iso), parsed_id
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
-        raise ValueError(f"malformed cursor {cursor!r}") from exc
+        raise ValueError(f"malformed cursor {cursor[:32]!r}") from exc
 
 
 def _utc(iso: str) -> datetime:

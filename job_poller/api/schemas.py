@@ -62,6 +62,9 @@ class PostingOut(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     closed_at: datetime | None
+    # The middle term of the feed's sort key. Without it a client cannot
+    # reproduce or verify the order it was handed.
+    ats_posted_at: datetime | None
     is_open: bool
     days_open: float
     status: str | None
@@ -89,6 +92,7 @@ class PostingOut(BaseModel):
             first_seen_at=posting.first_seen_at,
             last_seen_at=posting.last_seen_at,
             closed_at=posting.closed_at,
+            ats_posted_at=posting.ats_posted_at,
             is_open=posting.is_open,
             days_open=round(posting.days_open, 3),
             status=app.status if app else None,

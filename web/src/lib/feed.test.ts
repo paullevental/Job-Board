@@ -49,3 +49,14 @@ describe("mergeGroups", () => {
     expect(merged[0].locations).toEqual(["City 1", "City 2"]);
   });
 });
+
+test("posting_count always reflects the postings actually held", () => {
+  // The server's count and the array length agree today, but a merged group
+  // recomputed its count while a first-seen group trusted the server. Two rules
+  // for one number is a silent divergence waiting for the server to change.
+  const server = { ...group(1, "SWE", [1, 2]), posting_count: 6 };
+
+  const merged = mergeGroups([server], []);
+
+  expect(merged[0].posting_count).toBe(merged[0].postings.length);
+});

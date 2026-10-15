@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from typing import Annotated
 
-from fastapi import Depends, Query
+from fastapi import Depends, Path, Query
 from sqlalchemy.orm import Session
 
 from .. import details
@@ -19,6 +19,11 @@ from ..db import session_scope
 from ..models import Posting
 
 MAX_LIMIT = 100
+# SQLite stores signed 64-bit integers; anything larger raises OverflowError
+# deep in the driver, which would surface to the client as "we have a bug"
+# rather than "that id cannot exist".
+MAX_DB_INT = 2**63 - 1
+MAX_SEARCH_LEN = 200
 
 
 def get_session() -> Iterator[Session]:
@@ -48,3 +53,7 @@ def get_detail_fetcher() -> DetailFetcher:
 
 
 FetcherDep = Annotated[DetailFetcher, Depends(get_detail_fetcher)]
+
+# A database id, bounded so an impossible one is a 422 rather than a 500.
+DbIdPath = Annotated[int, Path(ge=0, le=MAX_DB_INT)]
+DbIdQuery = Annotated[int | None, Query(ge=0, le=MAX_DB_INT)]

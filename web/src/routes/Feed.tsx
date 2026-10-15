@@ -1,32 +1,62 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, fetchFeed, fetchHealth } from "../lib/api";
 import { mergeGroups } from "../lib/feed";
+import { withDividers } from "../lib/dividers";
 import type { FeedGroup, SystemHealth } from "../lib/types";
-import { DateDivider, dividerLabel } from "../components/DateDivider";
+import { DateDivider } from "../components/DateDivider";
 import { PostingRow } from "../components/PostingRow";
 import { FreshBand } from "../components/FreshBand";
-import { CaughtUp, FeedError, FirstRun, HealthDot, Skeleton } from "../components/FeedStates";
+import {
+  CaughtUp,
+  FeedError,
+  FilteredEmpty,
+  FirstRun,
+  HealthDot,
+  HealthUnknown,
+  Skeleton,
+} from "../components/FeedStates";
+
+/** `null` while the health call is in flight, `"failed"` once it has failed.
+ * The two must stay distinct: an empty feed beside an unknown poller state is
+ * not "caught up", it is "we cannot tell", and claiming the former would break
+ * the project's third invariant. */
+type HealthState = SystemHealth | null | "failed";
 
 export function Feed() {
   const [groups, setGroups] = useState<FeedGroup[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [freshCount, setFreshCount] = useState(0);
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
-  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [health, setHealth] = useState<HealthState>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [canadaOnly, setCanadaOnly] = useState(false);
 
-  // Guards against a second page landing after the filter changed and
-  // stitching rows from two different queries into one list.
+  // Discards a response whose request has been superseded - a filter toggled
+  // while a page was in flight, or StrictMode's double effect in development.
   const requestId = useRef(0);
+  // Closes the window between a click and React disabling the button, where a
+  // second click could fire a duplicate request and strand `loadingMore`.
+  const inFlight = useRef(false);
+  const endOfFeed = useRef<HTMLParagraphElement>(null);
+  const wasPaging = useRef(false);
 
   const load = useCallback(
     async (opts: { cursor?: string | null; append?: boolean; canadaOnly: boolean }) => {
+      if (opts.append && inFlight.current) return;
+
       const id = ++requestId.current;
-      opts.append ? setLoadingMore(true) : setLoading(true);
-      setError(null);
+      inFlight.current = true;
+      if (opts.append) {
+        setLoadingMore(true);
+        setPageError(null);
+      } else {
+        setLoading(true);
+        setError(null);
+        setPageError(null);
+      }
 
       try {
         const page = await fetchFeed({ cursor: opts.cursor, canadaOnly: opts.canadaOnly });
@@ -38,9 +68,12 @@ export function Feed() {
         setLastSeenAt(page.last_seen_at);
       } catch (err) {
         if (id !== requestId.current) return;
-        setError(err instanceof ApiError ? err.message : "Something went wrong.");
+        const message = err instanceof ApiError ? err.message : "Something went wrong.";
+        // A failed page is not a failed feed: the rows already read stay put.
+        opts.append ? setPageError(message) : setError(message);
       } finally {
         if (id === requestId.current) {
+          inFlight.current = false;
           setLoading(false);
           setLoadingMore(false);
         }
@@ -54,14 +87,27 @@ export function Feed() {
   }, [load, canadaOnly]);
 
   useEffect(() => {
-    // Health is advisory: if it fails the feed is still perfectly usable, so a
-    // failure here must not surface as a feed error.
     fetchHealth()
       .then(setHealth)
-      .catch(() => setHealth(null));
+      .catch(() => setHealth("failed"));
   }, []);
 
+  // Reaching the end unmounts the button the keyboard user was on, dropping
+  // focus to <body> after they paged through hundreds of rows.
+  useEffect(() => {
+    if (wasPaging.current && cursor === null) endOfFeed.current?.focus();
+    wasPaging.current = cursor !== null;
+  }, [cursor]);
+
   const totalPostings = groups.reduce((n, g) => n + g.posting_count, 0);
+  const items = withDividers(groups);
+  const announcement = loading
+    ? "Loading the feed"
+    : error
+      ? `Could not load the feed: ${error}`
+      : `${totalPostings} ${totalPostings === 1 ? "role" : "roles"} shown${
+          canadaOnly ? ", Canada only" : ""
+        }`;
 
   return (
     <div className="mx-auto w-full max-w-[46rem] px-5 pb-28">
@@ -92,12 +138,22 @@ export function Feed() {
         </div>
       </header>
 
+      {/* One polite region describing the list, so a filter toggle or a new
+          page is announced rather than silently swapping the content. */}
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+
       {loading ? (
         <Skeleton />
       ) : error ? (
         <FeedError message={error} onRetry={() => load({ canadaOnly })} />
       ) : groups.length === 0 ? (
-        health?.state === "unknown" ? (
+        canadaOnly ? (
+          <FilteredEmpty onClear={() => setCanadaOnly(false)} />
+        ) : health === null || health === "failed" ? (
+          <HealthUnknown failed={health === "failed"} />
+        ) : health.state === "unknown" ? (
           <FirstRun />
         ) : (
           <CaughtUp />
@@ -106,22 +162,19 @@ export function Feed() {
         <>
           <FreshBand freshCount={freshCount} total={totalPostings} lastSeenAt={lastSeenAt} />
 
-          {/* The rail. One vertical line the whole column hangs from, because
-              time is the primary axis of this product. */}
-          <div
-            className="relative mt-1"
-            style={{ ["--rail-x" as string]: "1.75rem" }}
-          >
+          <div className="relative mt-1">
             <span
               aria-hidden="true"
               className="absolute top-2 bottom-2 left-[12px] w-px"
               style={{ backgroundColor: "var(--rail)" }}
             />
 
-            <ol className="list-none p-0">
-              {withDividers(groups).map((item) =>
+            {/* role="list" is explicit: Safari drops list semantics when
+                list-style is none, losing "list, 25 items" in VoiceOver. */}
+            <ol role="list" className="list-none p-0">
+              {items.map((item) =>
                 item.kind === "divider" ? (
-                  <li key={`d-${item.label}`}>
+                  <li key={item.key}>
                     <DateDivider label={item.label} count={item.count} />
                   </li>
                 ) : (
@@ -133,6 +186,15 @@ export function Feed() {
             </ol>
           </div>
 
+          {pageError && (
+            <p
+              role="alert"
+              className="mt-6 ml-[var(--rail-x)] rounded-[var(--radius-sm)] border border-[var(--rejected)] px-3 py-2 text-[0.8rem] text-[var(--rejected)]"
+            >
+              {pageError}
+            </p>
+          )}
+
           {cursor && (
             <div className="pt-8 pl-[var(--rail-x)]">
               <button
@@ -141,13 +203,17 @@ export function Feed() {
                 onClick={() => load({ cursor, append: true, canadaOnly })}
                 className="w-full rounded-[var(--radius)] border border-[var(--border)] py-2.5 text-[0.85rem] text-[var(--text-dim)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
               >
-                {loadingMore ? "Loading..." : "Older postings"}
+                {loadingMore ? "Loading..." : pageError ? "Try that page again" : "Older postings"}
               </button>
             </div>
           )}
 
-          {!cursor && groups.length > 0 && (
-            <p className="pt-10 text-center text-[0.78rem] text-[var(--text-faint)]">
+          {!cursor && (
+            <p
+              ref={endOfFeed}
+              tabIndex={-1}
+              className="pt-10 text-center text-[0.78rem] text-[var(--text-faint)]"
+            >
               That is everything open right now.
             </p>
           )}
@@ -155,30 +221,4 @@ export function Feed() {
       )}
     </div>
   );
-}
-
-type Item =
-  | { kind: "divider"; label: string; count: number }
-  | { kind: "group"; group: FeedGroup };
-
-/** Chunk the rail by day, counting postings rather than groups: the count is
- * meant to convey the day's volume, and a group can hold six of them. */
-function withDividers(groups: FeedGroup[]): Item[] {
-  const out: Item[] = [];
-  let current: string | null = null;
-
-  for (let i = 0; i < groups.length; i++) {
-    const label = dividerLabel(groups[i].first_seen_at);
-    if (label !== current) {
-      const count = groups
-        .slice(i)
-        .filter((g) => dividerLabel(g.first_seen_at) === label)
-        .reduce((n, g) => n + g.posting_count, 0);
-      out.push({ kind: "divider", label, count });
-      current = label;
-    }
-    out.push({ kind: "group", group: groups[i] });
-  }
-
-  return out;
 }

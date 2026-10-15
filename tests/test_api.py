@@ -620,3 +620,88 @@ def test_a_posting_with_no_detail_row_reports_not_fetched():
 
     assert description.state == "not_fetched"
     assert description.html is None
+
+
+# --- bad input is the caller's error, never ours -------------------------
+
+
+def test_an_oversized_posting_id_is_a_client_error(client):
+    """Beyond 2**63 SQLite raises OverflowError. Reported as internal_error the
+    frontend reads it as "we have a bug" rather than "your input was wrong"."""
+    r = client.get(f"/api/postings/{2**63}")
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_request"
+
+
+def test_an_oversized_company_filter_is_a_client_error(client):
+    assert client.get("/api/postings", params={"company_id": 2**63}).status_code == 422
+
+
+def test_an_oversized_year_is_a_client_error(client):
+    assert client.get("/api/postings", params={"year": 2**63}).status_code == 422
+
+
+def test_an_oversized_application_id_is_a_client_error(client):
+    assert client.get(f"/api/applications/{2**63}/events").status_code == 422
+
+
+def test_a_cursor_carrying_an_oversized_id_is_refused_as_a_cursor(client):
+    import base64
+
+    raw = f"2|2026-10-13T18:57:35+00:00|2026-10-07T15:23:54+00:00|{2**63}"
+    cursor = base64.urlsafe_b64encode(raw.encode()).decode()
+
+    r = client.get("/api/feed", params={"cursor": cursor})
+
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_cursor"
+
+
+def test_a_search_wildcard_is_matched_literally(client, session, company):
+    """A search box that returns the whole table for "%" is not a search box."""
+    add(session, company, "Backend Intern", minutes=1)
+    add(session, company, "100% Remote Intern", minutes=2)
+
+    body = client.get("/api/postings", params={"q": "%"}).json()
+
+    assert [p["title"] for p in body["postings"]] == ["100% Remote Intern"]
+
+
+def test_a_search_underscore_is_matched_literally(client, session, company):
+    add(session, company, "Backend Intern", minutes=1)
+    add(session, company, "Data_Eng Intern", minutes=2)
+
+    body = client.get("/api/postings", params={"q": "_"}).json()
+
+    assert [p["title"] for p in body["postings"]] == ["Data_Eng Intern"]
+
+
+def test_an_absurdly_long_search_is_refused_not_crashed(client):
+    """SQLite caps LIKE patterns at 50,000 characters and raises past it."""
+    r = client.get("/api/postings", params={"q": "x" * 60_000})
+
+    assert r.status_code == 422
+
+
+def test_the_cursor_error_does_not_echo_the_whole_cursor(client):
+    r = client.get("/api/feed", params={"cursor": "z" * 5000})
+
+    assert r.status_code == 422
+    assert len(r.json()["error"]["message"]) < 200
+
+
+def test_a_negative_poll_interval_is_refused(client):
+    assert client.get("/api/system/health", params={"expected_interval_s": -1}).status_code == 422
+
+
+def test_a_posting_exposes_the_date_the_employer_published_it(client, session, company):
+    """It is the middle term of the documented sort key; without it a client
+    cannot reproduce or verify the order it was handed."""
+    p = add(session, company)
+    p.ats_posted_at = T0
+    session.flush()
+
+    (row,) = client.get("/api/postings").json()["postings"]
+
+    assert row["ats_posted_at"] is not None

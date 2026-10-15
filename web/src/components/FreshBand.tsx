@@ -16,7 +16,11 @@ export function FreshBand({
 }) {
   if (total === 0) return null;
 
-  const pct = Math.min(100, Math.round((freshCount / Math.max(total, 1)) * 100));
+  // `freshCount` counts the whole feed while `total` counts what is loaded, so
+  // the raw pair can read "204 of 25". Clamped, because an ARIA value above its
+  // own maximum is announced verbatim and means nothing.
+  const shown = Math.min(freshCount, total);
+  const pct = Math.min(100, Math.round((shown / Math.max(total, 1)) * 100));
 
   return (
     <section
@@ -41,7 +45,7 @@ export function FreshBand({
         className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full"
         style={{ backgroundColor: "var(--age-empty)" }}
         role="progressbar"
-        aria-valuenow={freshCount}
+        aria-valuenow={shown}
         aria-valuemin={0}
         aria-valuemax={total}
       >

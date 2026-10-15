@@ -1,5 +1,7 @@
 import type { SystemHealth } from "../lib/types";
 
+type HealthState = SystemHealth | null | "failed";
+
 /**
  * Empty is not one state, it is four, and they call for opposite responses:
  * nothing new, never polled, the poller died, the API is down. A blank area
@@ -51,6 +53,45 @@ export function FirstRun() {
   );
 }
 
+export function FilteredEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <Panel>
+      <h2 className="font-[family-name:var(--font-title)] text-[1.5rem] text-[var(--text)]">
+        No Canada-eligible roles open
+      </h2>
+      <p className="mt-1.5 max-w-md text-[0.9rem] text-[var(--text-dim)]">
+        The filter emptied this list, not your triage. Only 13 of 204 open matches
+        are Canada-eligible right now, and 19 of the 39 configured boards are
+        returning 404 - most of them the Canadian ones.
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="mt-4 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-1.5 text-[0.85rem] text-[var(--text)] transition-colors hover:border-[var(--fresh)] hover:text-[var(--fresh)]"
+      >
+        Show every role
+      </button>
+    </Panel>
+  );
+}
+
+/** An empty feed means nothing until we know the poller is alive. Claiming
+ * "caught up" here would be exactly the ambiguity invariant 3 forbids. */
+export function HealthUnknown({ failed }: { failed: boolean }) {
+  return (
+    <Panel>
+      <h2 className="font-[family-name:var(--font-title)] text-[1.5rem] text-[var(--text)]">
+        {failed ? "Cannot confirm the poller is alive" : "Checking the poller"}
+      </h2>
+      <p className="mt-1.5 max-w-md text-[0.9rem] text-[var(--text-dim)]">
+        {failed
+          ? "The feed is empty, but the health check failed - so this could be nothing new, or a poller that died days ago. Check that the API and the watcher are both running."
+          : "One moment."}
+      </p>
+    </Panel>
+  );
+}
+
 export function FeedError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <Panel>
@@ -87,8 +128,21 @@ export function Skeleton() {
 
 /** Poller liveness, so an empty feed is never ambiguous between "nothing new"
  * and "the watcher died three days ago". */
-export function HealthDot({ health }: { health: SystemHealth | null }) {
-  if (!health) return null;
+export function HealthDot({ health }: { health: HealthState }) {
+  if (health === null) return null;
+
+  if (health === "failed") {
+    return (
+      <span className="flex items-center gap-2 text-[0.75rem] text-[var(--text-dim)]">
+        <span
+          aria-hidden="true"
+          className="h-[7px] w-[7px] rounded-full"
+          style={{ backgroundColor: "var(--stage)" }}
+        />
+        <span>Poller state unknown</span>
+      </span>
+    );
+  }
 
   const copy: Record<SystemHealth["state"], string> = {
     green: "Poller healthy",

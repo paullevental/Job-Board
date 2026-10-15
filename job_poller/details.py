@@ -111,28 +111,37 @@ def get_or_fetch(
     # would cache "unavailable, reason unknown" forever and never retry.
     clean = sanitize(result.html) if result.ok else ""
 
-    detail = cached or PostingDetail(posting_id=posting.id)
-    detail.fetched_at = utcnow()
     if clean.strip():
-        detail.content_html = clean
-        # Derived from the sanitized HTML, never the raw: whatever the allowlist
-        # rejected must not reappear in a second field.
-        detail.content_text = to_text(clean)
-        detail.fetch_error = None
+        values = {
+            "content_html": clean,
+            # Derived from the sanitized HTML, never the raw: whatever the
+            # allowlist rejected must not reappear in a second field.
+            "content_text": to_text(clean),
+            "fetch_error": None,
+        }
     else:
-        detail.content_html = ""
-        detail.content_text = ""
-        detail.fetch_error = result.error or "no description published"
+        values = {
+            "content_html": "",
+            "content_text": "",
+            "fetch_error": result.error or "no description published",
+        }
 
-    _try_cache(session, detail, is_new=cached is None)
-    # Returned rather than read back off `posting.detail`: after a rolled-back
-    # write the relationship is unreliable, and the caller needs what we fetched
-    # regardless of whether storing it worked.
-    return detail
+    detail = cached or PostingDetail(posting_id=posting.id)
+    for field, value in values.items():
+        setattr(detail, field, value)
+    detail.fetched_at = utcnow()
+
+    if _try_cache(session, detail, is_new=cached is None):
+        return detail
+
+    # The write was rolled back, so the ORM instance no longer carries what we
+    # just fetched -- returning it would serve the stale row the rollback
+    # restored. Hand back a detached carrier of the real values instead.
+    return PostingDetail(posting_id=posting.id, fetched_at=utcnow(), **values)
 
 
-def _try_cache(session: Session, detail: PostingDetail, *, is_new: bool) -> None:
-    """Persist the description, or give up quietly.
+def _try_cache(session: Session, detail: PostingDetail, *, is_new: bool) -> bool:
+    """Persist the description, or give up quietly. True when it landed.
 
     Two ways this legitimately fails, and neither is the user's problem: the
     poller holds SQLite's single write lock mid-commit, or two first-opens of the
@@ -140,13 +149,20 @@ def _try_cache(session: Session, detail: PostingDetail, *, is_new: bool) -> None
     already have the description in hand -- serving it uncached beats failing a
     page that would otherwise have worked.
     """
+    # Captured before the flush: afterwards the instance may be expired or
+    # detached, and reading an attribute off it raises a different exception
+    # than the two caught here -- which is how this guard was escaped before.
+    posting_id = detail.posting_id
     try:
         if is_new:
             session.add(detail)
         session.flush()
+        return True
     except (OperationalError, IntegrityError) as exc:
-        log.warning("could not cache description for posting %s: %s", detail.posting_id, exc)
+        # Roll back first. Touching the session before this raises instead.
         session.rollback()
+        log.warning("could not cache description for posting %s: %s", posting_id, exc)
+        return False
 
 
 def fetch_via_adapter(posting: Posting) -> DetailResult:
